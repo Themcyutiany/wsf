@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-var version = "0.5.0"
+var version = "0.6.0"
 
 func main() {
 	var (
@@ -25,6 +25,7 @@ func main() {
 		proxy   = flag.String("proxy", "http://127.0.0.1:7897", "远程下载使用的 HTTP 代理")
 		noProxy = flag.Bool("no-proxy", false, "禁用代理，远程下载直连")
 		pws       = flag.String("pws", "", "Web 访问密码（设置后浏览/下载需输入密码）")
+		apiKey    = flag.String("api", "", "API 密钥（设置后启用 /api/v1 接口，脚本用 Bearer 密钥调用）")
 		public    = flag.Bool("public", false, "公网模式：必须设置 -pws 密码，并输出安全提示")
 		certFile  = flag.String("cert", "", "HTTPS 证书文件（与 -key 一起提供后启用 HTTPS）")
 		keyFile   = flag.String("key", "", "HTTPS 私钥文件")
@@ -35,7 +36,7 @@ func main() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintf(out, "wsf %s — 局域网网页文件共享\n\n用法: wsf [-f 文件夹] [-p 端口] [选项]\n\n选项:\n", version)
 		flag.PrintDefaults()
-		fmt.Fprintf(out, "\n示例:\n  wsf -f D:\\share -p 5665\n  wsf -f D:\\share -p 5665 -pws 123456\n  wsf -f . -p 8080 --no-proxy\n  wsf -f . -p 8443 -pws 密码 -public -cert cert.pem -key key.pem\n")
+		fmt.Fprintf(out, "\n示例:\n  wsf -f D:\\share -p 5665\n  wsf -f D:\\share -p 5665 -pws 123456\n  wsf -f . -p 8080 --no-proxy\n  wsf -f . -p 8443 -pws 密码 -public -cert cert.pem -key key.pem\n  wsf -f . -p 5665 -api 我的密钥   # 开启 API\n")
 	}
 	flag.Parse()
 
@@ -76,7 +77,7 @@ func main() {
 		log.Fatal("IP 白名单格式无效，示例：-allow 1.2.3.4,10.0.0.0/8")
 	}
 
-	app := NewApp(absRoot, *proxy, *noProxy, *port, *pws, *public, useTLS, allow)
+	app := NewApp(absRoot, *proxy, *noProxy, *port, *pws, *apiKey, *public, useTLS, allow)
 	server := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", *addr, *port),
 		Handler:           app.handler(),
@@ -132,6 +133,17 @@ func printBanner(app *App) {
 		fmt.Println("  公网模式  已开启")
 	} else {
 		fmt.Println("  公网模式  未开启（默认仅适合可信局域网）")
+	}
+	if app.apiKey != "" {
+		fmt.Println("  API        已启用（/api/v1，脚本用 Authorization: Bearer 密钥调用）")
+		if len(app.apiKey) < 8 {
+			fmt.Println("  API 提示  API 密钥过短，建议至少 8 位")
+		}
+		if !app.authEnabled {
+			fmt.Println("  API 提示  未设置 -pws，网页与接口均免密，建议同时设置访问密码")
+		}
+	} else {
+		fmt.Println("  API        未启用（-api 密钥可开启 /api/v1 接口）")
 	}
 	if app.https {
 		fmt.Println("  HTTPS      已启用（密码与流量加密传输）")

@@ -22,14 +22,16 @@ type App struct {
 	password    string
 	authEnabled bool
 	authSecret  []byte
+	apiKey      string
 	publicMode  bool
 	https       bool
 	allowList   []netip.Prefix
 	limiter     *loginLimiter
+	apiLimiter  *loginLimiter
 	ffmpeg      *ffmpegInfo
 }
 
-func NewApp(root, proxy string, noProxy bool, port int, password string, publicMode, https bool, allowList []netip.Prefix) *App {
+func NewApp(root, proxy string, noProxy bool, port int, password, apiKey string, publicMode, https bool, allowList []netip.Prefix) *App {
 	return &App{
 		root:        root,
 		port:        port,
@@ -41,10 +43,12 @@ func NewApp(root, proxy string, noProxy bool, port int, password string, publicM
 		password:    password,
 		authEnabled: password != "",
 		authSecret:  newAuthSecret(),
+		apiKey:      apiKey,
 		publicMode:  publicMode,
 		https:       https,
 		allowList:   allowList,
 		limiter:     newLoginLimiter(),
+		apiLimiter:  newLoginLimiter(),
 		ffmpeg:      detectFFmpeg(),
 	}
 }
@@ -71,6 +75,18 @@ func (a *App) handler() http.Handler {
 	mux.HandleFunc("/api/tasks", a.requireAuthFunc(a.handleTasks))
 	mux.HandleFunc("/api/tasks/", a.requireAuthFunc(a.handleTaskAction))
 
+	// API（-api 密钥）：脚本程序可通过 /api/v1/* 用 Bearer 密钥调用
+	mux.HandleFunc("/api/v1/info", a.apiAuth(a.handleInfo))
+	mux.HandleFunc("/api/v1/list", a.apiAuth(a.handleList))
+	mux.HandleFunc("/api/v1/download", a.apiAuth(a.handleDownload))
+	mux.HandleFunc("/api/v1/preview", a.apiAuth(a.handlePreview))
+	mux.HandleFunc("/api/v1/thumb", a.apiAuth(a.handleThumb))
+	mux.HandleFunc("/api/v1/zip", a.apiAuth(a.handleZip))
+	mux.HandleFunc("/api/v1/upload", a.apiAuth(a.handleAPIUpload))
+	mux.HandleFunc("/api/v1/url-download", a.apiAuth(a.handleURLDownload))
+	mux.HandleFunc("/api/v1/tasks", a.apiAuth(a.handleTasks))
+	mux.HandleFunc("/api/v1/tasks/", a.apiAuth(a.handleAPITaskAction))
+
 	return a.secure(securityHeaders(logRequests(mux)))
 }
 
@@ -81,7 +97,7 @@ func (a *App) secure(next http.Handler) http.Handler {
 			httpError(w, http.StatusForbidden, "你的 IP 不在允许访问的列表内")
 			return
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && strings.HasPrefix(r.URL.Path, "/api/") && !sameOrigin(r) {
+		if !strings.HasPrefix(r.URL.Path, "/api/v1/") && r.Method != http.MethodGet && r.Method != http.MethodHead && strings.HasPrefix(r.URL.Path, "/api/") && !sameOrigin(r) {
 			httpError(w, http.StatusForbidden, "跨站请求被拒绝")
 			return
 		}
@@ -115,6 +131,7 @@ func (a *App) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"proxy":     a.proxy,
 		"noProxy":   a.noProxy,
 		"auth":      a.authEnabled,
+		"api":       a.apiKey != "",
 		"preview": map[string]any{
 			"ffmpeg": a.transcodeOK(),
 			"codec":  a.videoCodecName(),

@@ -147,24 +147,37 @@ func (a *App) handleTaskAction(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	t, ok := a.tasks.get(id)
-	if !ok {
+	if _, ok := a.tasks.get(id); !ok {
 		httpError(w, http.StatusNotFound, "任务不存在")
 		return
 	}
 	if strings.HasSuffix(r.URL.Path, "/cancel") {
-		t.mu.Lock()
-		if t.cancel != nil {
-			t.cancel()
+		snap, ok := a.cancelTask(id)
+		if !ok {
+			httpError(w, http.StatusNotFound, "任务不存在")
+			return
 		}
-		if t.Status == "downloading" {
-			t.Status = "canceled"
-		}
-		t.mu.Unlock()
-		writeJSON(w, t.snapshot())
+		writeJSON(w, snap)
 		return
 	}
 	httpError(w, http.StatusNotFound, "未知操作")
+}
+
+// cancelTask 取消指定任务，返回任务快照与是否成功。
+func (a *App) cancelTask(id string) (map[string]any, bool) {
+	t, ok := a.tasks.get(id)
+	if !ok {
+		return nil, false
+	}
+	t.mu.Lock()
+	if t.cancel != nil {
+		t.cancel()
+	}
+	if t.Status == "downloading" {
+		t.Status = "canceled"
+	}
+	t.mu.Unlock()
+	return t.snapshot(), true
 }
 
 func (a *App) runTask(t *Task) {

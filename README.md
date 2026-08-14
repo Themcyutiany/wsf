@@ -40,6 +40,9 @@ wsf -f D:\share -p 8080
 # 设置 Web 访问密码（打开网页需先输密码才能浏览/下载）
 wsf -f D:\share -p 5665 -pws 123456
 
+# 开启 API（脚本用 Bearer 密钥调用 /api/v1/*）
+wsf -f D:\share -p 5665 -api 你的密钥
+
 # 远程下载不走代理（直连）
 wsf -f . --no-proxy
 ```
@@ -54,6 +57,7 @@ wsf -f . --no-proxy
 | `-f 文件夹` | 要共享的文件夹 | 当前目录 |
 | `-p 端口` | 监听端口 | `5665` |
 | `-pws 密码` | Web 访问密码（设置后浏览/下载需先输密码） | 空（不设密码） |
+| `-api 密钥` | API 密钥（设置后启用 `/api/v1` 接口，脚本用 Bearer 密钥调用） | 空（不启用） |
 | `-a 地址` | 监听地址（`[::]` 双栈） | `[::]` |
 | `-public` | 公网模式：强制要求设置 `-pws` 密码，防止无密码暴露到公网 | 关 |
 | `-cert 证书` | HTTPS 证书文件（与 `-key` 一起提供后启用 HTTPS） | 空（HTTP） |
@@ -77,6 +81,53 @@ wsf -f . --no-proxy
 - 媒体预览说明：jpg/png/gif/webp/svg、mp4/webm/ogv/mov、mp3/wav/flac/m4a/ogg 等常用格式
   由浏览器原生播放；mkv/avi/flv/wmv/heic/ape 等其余格式由程序内置的 `ffmpeg` 自动
   转码播放（正式版二进制已内置 ffmpeg，无需安装；启动横幅会显示检测状态）
+
+## ⚙️ HTTP API（`-api 密钥`）
+
+启动时加 `-api 你的密钥` 即开启 `/api/v1/*` 接口，供脚本 / 程序调用（上传、下载、
+远程下载、打包、预览等）。调用时在请求头带密钥：
+
+```text
+Authorization: Bearer 你的密钥
+# 或
+X-API-Key: 你的密钥
+```
+
+常用接口（`BASE` 为 `http://服务器:端口`）：
+
+```bash
+KEY='你的密钥'
+BASE='http://192.168.1.8:5665'
+
+# 服务信息
+curl -H "Authorization: Bearer $KEY" $BASE/api/v1/info
+
+# 列目录
+curl -H "Authorization: Bearer $KEY" "$BASE/api/v1/list?path=/"
+
+# 下载文件
+curl -H "Authorization: Bearer $KEY" -OJ "$BASE/api/v1/download?path=/docs/报告.pdf"
+
+# 上传文件到 /uploads（同名自动加 (1)(2)，不覆盖）
+curl -H "Authorization: Bearer $KEY" -F "file=@本地文件.zip" "$BASE/api/v1/upload?path=/uploads"
+
+# 打包下载文件夹
+curl -H "Authorization: Bearer $KEY" -OJ "$BASE/api/v1/zip?path=/photos"
+
+# 远程下载（服务器通过代理抓取链接存入共享目录）
+curl -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/a.iso"}' $BASE/api/v1/url-download
+
+# 查看 / 取消远程下载任务
+curl -H "Authorization: Bearer $KEY" $BASE/api/v1/tasks
+curl -H "Authorization: Bearer $KEY" -X POST $BASE/api/v1/tasks/<任务ID>/cancel
+```
+
+> 接口一览：`info` 服务信息 · `list` 列目录 · `download` 下载 ·
+> `preview` / `thumb` 媒体预览与缩略图 · `zip` 打包 · `upload` 上传 ·
+> `url-download` 远程下载 · `tasks` / `tasks/{id}/cancel` 任务管理。
+> API 用请求头密钥认证（不走 Cookie），不受浏览器跨站限制；建议配合 `-pws`
+> 一起使用，避免网页免密时接口被他人直接调用。
 
 ## 🔐 公网安全
 
