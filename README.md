@@ -5,6 +5,27 @@
 搜索并下载文件，支持文件夹一键打包 ZIP，还支持“远程下载”——粘贴链接，由本机通过
 代理抓取后存进共享目录，供局域网内所有人下载。
 
+## ⚡ 一键安装
+
+**Windows（PowerShell 里粘贴这一行，回车）：**
+
+```powershell
+irm https://raw.githubusercontent.com/Themcyutiany/wsf/main/install.ps1 | iex
+```
+
+**Linux（终端里粘贴这一行，回车，无需 sudo）：**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Themcyutiany/wsf/main/install.sh | bash
+```
+
+> 装完**重新打开终端**，任意目录输入 `wsf` 即可使用。安装脚本会自动获取最新版本并
+> **校验下载包的 SHA-256**（与发布页 `sha256sums.txt` 对照），校验失败会自动报错。
+> 直连 GitHub 慢时先设置代理：Windows 在 PowerShell 执行
+> `$env:HTTPS_PROXY='http://你的代理地址:端口'`，Linux 执行
+> `export HTTPS_PROXY=http://你的代理地址:端口`。
+> 也可以直接从 [GitHub Releases](https://github.com/Themcyutiany/wsf/releases) 下载二进制。
+
 ## 快速开始
 
 ```bash
@@ -33,7 +54,11 @@ wsf -f . --no-proxy
 | `-f 文件夹` | 要共享的文件夹 | 当前目录 |
 | `-p 端口` | 监听端口 | `5665` |
 | `-pws 密码` | Web 访问密码（设置后浏览/下载需先输密码） | 空（不设密码） |
-| `-a 地址` | 监听地址 | `0.0.0.0` |
+| `-a 地址` | 监听地址（`[::]` 双栈） | `[::]` |
+| `-public` | 公网模式：强制要求设置 `-pws` 密码，防止无密码暴露到公网 | 关 |
+| `-cert 证书` | HTTPS 证书文件（与 `-key` 一起提供后启用 HTTPS） | 空（HTTP） |
+| `-key 私钥` | HTTPS 私钥文件 | 空（HTTP） |
+| `-allow IP/CIDR` | 仅允许这些 IP/CIDR 访问（逗号分隔，如 `1.2.3.4,10.0.0.0/8`） | 空（不限制） |
 | `--proxy 地址` | 远程下载使用的 HTTP 代理 | `http://127.0.0.1:7897` |
 | `--no-proxy` | 远程下载直连，不走代理 | 关 |
 | `--version` | 显示版本号 |  |
@@ -53,6 +78,25 @@ wsf -f . --no-proxy
   由浏览器原生播放；mkv/avi/flv/wmv/heic/ape 等其余格式由程序内置的 `ffmpeg` 自动
   转码播放（正式版二进制已内置 ffmpeg，无需安装；启动横幅会显示检测状态）
 
+## 🔐 公网安全
+
+把 wsf 暴露到公网（端口映射 / 云服务器）前，请务必开启以下防护：
+
+- **必须设置密码**：`-pws 密码`，否则任何人都能浏览下载你的文件
+- **强制公网模式**：`-public`，未设置密码时程序会拒绝启动
+- **HTTPS 加密**：`-cert 证书 -key 私钥` 提供后流量与密码均加密传输
+  （可用 Caddy / Nginx 反向代理自动签发证书，或使用自签名证书）
+- **IP 白名单**：`-allow 1.2.3.4,10.0.0.0/8`，仅允许指定来源访问
+- **登录防爆破**：同一 IP 连续输错 5 次密码自动锁定 15 分钟
+- **跨站请求防护**：所有写操作校验来源，恶意网页无法借用你的浏览器操作
+- **安全响应头**：CSP / X-Frame-Options / nosniff / API 禁止缓存
+
+公网部署示例：
+
+```bash
+wsf -f /data/share -p 8443 -pws 你的强密码 -public -allow 202.96.134.0/24 -cert fullchain.pem -key privkey.pem
+```
+
 ## 构建
 
 需要 Go 1.24+：
@@ -61,11 +105,17 @@ wsf -f . --no-proxy
 go build .                  # 构建当前平台（不带内置 ffmpeg）
 go build -tags embedded_ffmpeg .   # 构建并内置 ffmpeg（正式版方式）
 make build                  # 构建当前平台（make 构建默认内置 ffmpeg）
-make release                # 交叉编译 Windows/Linux amd64+arm64 到 dist/（内置 ffmpeg）
+make release                # 交叉编译 4 个平台二进制到 dist/ 并生成 sha256sums.txt
 make test                   # go vet + go test
 ```
 
+> amd64 版本内置 ffmpeg（开箱即转码）；arm64 版本未内置 ffmpeg，需要系统安装
+> ffmpeg 才能转码非原生格式。
+> 打 `v*` 标签推送到 GitHub 后，`.github/workflows/release.yml` 会自动构建并发布
+> Release（含 sha256sums.txt），一键安装脚本随后即可安装到该版本。
+
 ## 安全提示
 
-默认无鉴权，适合可信局域网内部使用；如需限制访问，用 `-pws` 设置访问密码。
-即便如此，也不建议直接暴露到公网。
+- 局域网内可信环境可直接使用；跨网段或公网分享务必开启 `-pws` + `-public`，
+  公网建议再加 HTTPS 与 IP 白名单（见上方“公网安全”）。
+- 即使有密码保护，也不建议把任意文件目录长期暴露到公网；分享完及时退出。

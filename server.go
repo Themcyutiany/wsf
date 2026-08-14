@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 )
@@ -21,21 +22,29 @@ type App struct {
 	password    string
 	authEnabled bool
 	authSecret  []byte
+	publicMode  bool
+	https       bool
+	allowList   []netip.Prefix
+	limiter     *loginLimiter
 	ffmpeg      *ffmpegInfo
 }
 
-func NewApp(root, proxy string, noProxy bool, port int, password string) *App {
+func NewApp(root, proxy string, noProxy bool, port int, password string, publicMode, https bool, allowList []netip.Prefix) *App {
 	return &App{
-		root:      root,
-		port:      port,
-		proxy:     proxy,
-		noProxy:   noProxy,
+		root:        root,
+		port:        port,
+		proxy:       proxy,
+		noProxy:     noProxy,
 		addrs:       lanIPs(),
 		startTime:   time.Now(),
 		tasks:       NewTaskManager(),
 		password:    password,
 		authEnabled: password != "",
 		authSecret:  newAuthSecret(),
+		publicMode:  publicMode,
+		https:       https,
+		allowList:   allowList,
+		limiter:     newLoginLimiter(),
 		ffmpeg:      detectFFmpeg(),
 	}
 }
@@ -62,7 +71,22 @@ func (a *App) handler() http.Handler {
 	mux.HandleFunc("/api/tasks", a.requireAuthFunc(a.handleTasks))
 	mux.HandleFunc("/api/tasks/", a.requireAuthFunc(a.handleTaskAction))
 
-	return logRequests(mux)
+	return a.secure(securityHeaders(logRequests(mux)))
+}
+
+// secure 公网安全中间件：IP 白名单 + 跨站请求（CSRF）校验。
+func (a *App) secure(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !ipAllowed(a.allowList, remoteIP(r)) {
+			httpError(w, http.StatusForbidden, "你的 IP 不在允许访问的列表内")
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && strings.HasPrefix(r.URL.Path, "/api/") && !sameOrigin(r) {
+			httpError(w, http.StatusForbidden, "跨站请求被拒绝")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {

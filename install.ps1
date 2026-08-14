@@ -1,0 +1,110 @@
+# wsf 一键安装脚本（Windows）
+# 用法：irm https://raw.githubusercontent.com/Themcyutiany/wsf/main/install.ps1 | iex
+# 说明：不需要管理员权限；自动获取最新版本，按 CPU 架构下载对应程序，
+#       校验 SHA-256 后安装到 %LOCALAPPDATA%\wsf，并把该目录加入用户 PATH。
+
+$ErrorActionPreference = 'Stop'
+
+# 兼容 Windows PowerShell 5.1：GitHub 需要 TLS 1.2
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+
+# 关闭下载进度条，下载更快
+$ProgressPreference = 'SilentlyContinue'
+
+$Repo = 'Themcyutiany/wsf'
+
+# 1. 获取最新版本号（尽力而为，仅用于显示；下载走 releases/latest/download 自动指向最新版）
+#    通过 releases/latest 的 302 重定向解析版本号，不依赖 GitHub API（兼容 PS 5.1 / 7）
+$Tag = ''
+try {
+  $req = [System.Net.HttpWebRequest]::Create("https://github.com/$Repo/releases/latest")
+  $req.AllowAutoRedirect = $false
+  $req.Timeout = 15000
+  $req.UserAgent = 'wsf-installer'
+  $httpResp = $req.GetResponse()
+  try {
+    if ([int]$httpResp.StatusCode -eq 302) {
+      $loc = [string]$httpResp.Headers['Location']
+      if ($loc -match '/releases/tag/([^/]+)') { $Tag = $Matches[1] }
+    }
+  } finally { $httpResp.Close() }
+} catch {}
+if (-not $Tag) { $Tag = 'latest' }
+
+# 2. 根据 CPU 架构选择安装包
+$arch = $env:PROCESSOR_ARCHITECTURE
+$suffix = 'amd64'
+if ($arch -eq 'ARM64') { $suffix = 'arm64' }
+$asset = "wsf-windows-$suffix.exe"
+$url = "https://github.com/$Repo/releases/latest/download/$asset"
+
+# 3. 下载到临时目录
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('wsf-install-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+$exePath = Join-Path $tmp $asset
+Write-Host "正在下载 $asset（版本 $Tag）..."
+Invoke-WebRequest -Uri $url -OutFile $exePath -UseBasicParsing
+
+# 3.1 校验下载完整性（对照发布页的 sha256sums.txt）
+$sumPath = Join-Path $tmp 'sha256sums.txt'
+try {
+  Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest/download/sha256sums.txt" -OutFile $sumPath -UseBasicParsing -TimeoutSec 20
+  $want = $null
+  foreach ($line in (Get-Content -LiteralPath $sumPath -ErrorAction Stop)) {
+    if ($line -match "^\s*([0-9a-fA-F]{64})\s+$([regex]::Escape($asset))\s*$") {
+      $want = $Matches[1].ToLower()
+      break
+    }
+  }
+  if ($want) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $fs = [System.IO.File]::OpenRead($exePath)
+      try { $got = [System.BitConverter]::ToString($sha.ComputeHash($fs)).Replace('-', '').ToLower() }
+      finally { $fs.Dispose() }
+    } finally { $sha.Dispose() }
+    if ($got -ne $want) { throw "校验失败：$asset 的 SHA-256 与发布页不一致，请重新运行安装。" }
+    Write-Host "校验通过：$asset 与发布页 SHA-256 一致"
+  } else {
+    Write-Host "警告：发布页未列出 $asset 的校验值，跳过校验。"
+  }
+} catch {
+  if ($_.Exception.Message -like '*校验失败*') { throw }
+  Write-Host "警告：无法获取校验文件，跳过校验（$($_.Exception.Message)）"
+}
+
+# 4. 安装到用户目录（无需管理员权限）
+$destDir = Join-Path $env:LOCALAPPDATA 'wsf'
+New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+$dest = Join-Path $destDir 'wsf.exe'
+Copy-Item -LiteralPath $exePath -Destination $dest -Force
+Write-Host "已安装到：$dest"
+
+# 5. 把安装目录加入用户 PATH（只加一次，保留原有格式）
+$regKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
+if ($null -eq $regKey) { throw '无法打开 HKCU\Environment' }
+try {
+  $userPath = $regKey.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+  $kind = if ($regKey.GetValueNames() -contains 'Path') { $regKey.GetValueKind('Path') } else { [Microsoft.Win32.RegistryValueKind]::ExpandString }
+  $paths = @($userPath -split ';' | Where-Object { $_ -ne '' })
+  if ($paths -contains $destDir) {
+    Write-Host '用户 PATH 已包含安装目录，无需重复添加。'
+  } else {
+    $regKey.SetValue('Path', ($paths + $destDir) -join ';', $kind)
+    Write-Host "已把 $destDir 加入用户 PATH"
+  }
+} finally {
+  $regKey.Close()
+}
+
+# 6. 广播环境变量变更，让新打开的终端立即生效
+Add-Type -Namespace WsfInstall -Name Native -MemberDefinition '[DllImport("user32.dll", SetLastError=true, CharSet=CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);' -ErrorAction SilentlyContinue
+$wmResult = [UIntPtr]::Zero
+$null = [WsfInstall.Native]::SendMessageTimeout([IntPtr]0xFFFF, 0x1A, [UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$wmResult)
+
+# 7. 清理临时文件并验证
+Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+& $dest --version
+Write-Host ''
+Write-Host '安装完成！请重新打开一个终端（或新开窗口），然后在任意目录输入 wsf 即可。'
+Write-Host '快速开始：wsf -f D:\share        # 共享文件夹，默认端口 5665'

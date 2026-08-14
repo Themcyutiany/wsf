@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-var version = "0.4.0"
+var version = "0.5.0"
 
 func main() {
 	var (
@@ -24,14 +24,18 @@ func main() {
 		addr    = flag.String("a", "[::]", "监听地址（[::] 同时支持 IPv4 与 IPv6）")
 		proxy   = flag.String("proxy", "http://127.0.0.1:7897", "远程下载使用的 HTTP 代理")
 		noProxy = flag.Bool("no-proxy", false, "禁用代理，远程下载直连")
-		pws     = flag.String("pws", "", "Web 访问密码（设置后浏览/下载需输入密码）")
-		showVer = flag.Bool("version", false, "显示版本号")
+		pws       = flag.String("pws", "", "Web 访问密码（设置后浏览/下载需输入密码）")
+		public    = flag.Bool("public", false, "公网模式：必须设置 -pws 密码，并输出安全提示")
+		certFile  = flag.String("cert", "", "HTTPS 证书文件（与 -key 一起提供后启用 HTTPS）")
+		keyFile   = flag.String("key", "", "HTTPS 私钥文件")
+		allowList = flag.String("allow", "", "仅允许这些 IP/CIDR 访问（逗号分隔，如 1.2.3.4,10.0.0.0/8）")
+		showVer   = flag.Bool("version", false, "显示版本号")
 	)
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintf(out, "wsf %s — 局域网网页文件共享\n\n用法: wsf [-f 文件夹] [-p 端口] [选项]\n\n选项:\n", version)
 		flag.PrintDefaults()
-		fmt.Fprintf(out, "\n示例:\n  wsf -f D:\\share -p 5665\n  wsf -f D:\\share -p 5665 -pws 123456\n  wsf -f ./docs\n  wsf -f . -p 8080 --no-proxy\n")
+		fmt.Fprintf(out, "\n示例:\n  wsf -f D:\\share -p 5665\n  wsf -f D:\\share -p 5665 -pws 123456\n  wsf -f . -p 8080 --no-proxy\n  wsf -f . -p 8443 -pws 密码 -public -cert cert.pem -key key.pem\n")
 	}
 	flag.Parse()
 
@@ -57,7 +61,22 @@ func main() {
 		log.Fatalf("共享目录不是有效的文件夹: %s", absRoot)
 	}
 
-	app := NewApp(absRoot, *proxy, *noProxy, *port, *pws)
+	if *public && *pws == "" {
+		log.Fatal("公网模式（-public）必须同时设置访问密码（-pws），否则任何人都能访问你的文件")
+	}
+	useTLS := *certFile != "" || *keyFile != ""
+	if *certFile == "" || *keyFile == "" {
+		if useTLS {
+			log.Fatal("HTTPS 需要同时提供 -cert 和 -key 两个文件")
+		}
+	}
+
+	allow := parseAllowList(*allowList)
+	if *allowList != "" && len(allow) == 0 {
+		log.Fatal("IP 白名单格式无效，示例：-allow 1.2.3.4,10.0.0.0/8")
+	}
+
+	app := NewApp(absRoot, *proxy, *noProxy, *port, *pws, *public, useTLS, allow)
 	server := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", *addr, *port),
 		Handler:           app.handler(),
@@ -77,8 +96,14 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("服务启动失败: %v", err)
+	var serveErr error
+	if useTLS {
+		serveErr = server.ListenAndServeTLS(*certFile, *keyFile)
+	} else {
+		serveErr = server.ListenAndServe()
+	}
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		log.Fatalf("服务启动失败: %v", serveErr)
 	}
 	fmt.Println("已退出")
 }
@@ -99,9 +124,24 @@ func printBanner(app *App) {
 		fmt.Printf("  代理      %s（用于网页“远程下载”）\n", app.proxy)
 	}
 	if app.authEnabled {
-		fmt.Println("  访问密码  已启用")
+		fmt.Println("  访问密码  已启用（连续输错 5 次将锁定 15 分钟）")
 	} else {
 		fmt.Println("  访问密码  未启用（任何人可访问）")
+	}
+	if app.publicMode {
+		fmt.Println("  公网模式  已开启")
+	} else {
+		fmt.Println("  公网模式  未开启（默认仅适合可信局域网）")
+	}
+	if app.https {
+		fmt.Println("  HTTPS      已启用（密码与流量加密传输）")
+	} else {
+		fmt.Println("  HTTPS      未启用（密码将以明文传输，公网建议启用）")
+	}
+	if len(app.allowList) > 0 {
+		fmt.Printf("  IP 白名单  仅允许 %d 个网段访问\n", len(app.allowList))
+	} else {
+		fmt.Println("  IP 白名单  未限制（默认允许所有来源）")
 	}
 	if app.ffmpeg == nil {
 		fmt.Println("  媒体预览  原生格式（未检测到 ffmpeg，其他格式需安装 ffmpeg）")

@@ -42,6 +42,7 @@ func (a *App) issueSession(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   int(sessionTTL.Seconds()),
 		HttpOnly: true,
+		Secure:   a.https,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -75,6 +76,7 @@ func (a *App) clearSession(w http.ResponseWriter) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   a.https,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -89,17 +91,26 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true})
 		return
 	}
+	ip := remoteIP(r)
+	if d := a.limiter.locked(ip); d > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(d.Round(time.Second)/time.Second)))
+		httpError(w, http.StatusTooManyRequests, "尝试次数过多，请稍后再试")
+		return
+	}
 	var req struct {
 		Password string `json:"password"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpError(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
 	if subtle.ConstantTimeCompare([]byte(req.Password), []byte(a.password)) != 1 {
+		a.limiter.fail(ip)
 		httpError(w, http.StatusUnauthorized, "密码错误")
 		return
 	}
+	a.limiter.success(ip)
 	a.issueSession(w)
 	writeJSON(w, map[string]any{"ok": true})
 }

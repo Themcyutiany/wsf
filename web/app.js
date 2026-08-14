@@ -200,7 +200,7 @@ async function submitLogin(e) {
     await bootstrap();
   } catch (err) {
     const errEl = $('login-error');
-    errEl.textContent = err.status === 401 ? '密码错误，请重试' : '登录失败：' + err.message;
+    errEl.textContent = err.status === 401 ? '密码错误，请重试' : (err.status === 429 ? '尝试次数过多，请 15 分钟后再试' : '登录失败：' + err.message);
     errEl.classList.add('show');
     const card = document.querySelector('.login-card');
     card.classList.remove('shake');

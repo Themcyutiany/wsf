@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build release binaries
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          go build -trimpath -tags embedded_ffmpeg -ldflags "-s -w -X main.version=$VER" -o dist/wsf-windows-amd64.exe .
+          GOOS=windows GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=$VER" -o dist/wsf-windows-arm64.exe .
+          GOOS=linux GOARCH=amd64 go build -trimpath -tags embedded_ffmpeg -ldflags "-s -w -X main.version=$VER" -o dist/wsf-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=$VER" -o dist/wsf-linux-arm64 .
+          (cd dist && sha256sum * > sha256sums.txt)
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
