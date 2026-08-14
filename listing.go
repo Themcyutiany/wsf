@@ -36,11 +36,11 @@ func (a *App) resolve(vp string, mustDir bool) (string, string, error) {
 		abs = filepath.Join(a.root, filepath.FromSlash(rel))
 	}
 
-	rootRes, err := filepath.EvalSymlinks(a.root)
+	rootRes, err := realPath(a.root)
 	if err != nil {
 		return "", "", err
 	}
-	res, err := filepath.EvalSymlinks(abs)
+	res, err := realPath(abs)
 	if err != nil {
 		return "", "", err
 	}
@@ -49,7 +49,7 @@ func (a *App) resolve(vp string, mustDir bool) (string, string, error) {
 		return "", "", err
 	}
 	if rr == ".." || strings.HasPrefix(rr, ".."+string(filepath.Separator)) {
-		return "", "", errors.New("路径越界")
+		return "", "", errors.New("目标位于共享目录之外，已阻止访问")
 	}
 
 	info, err := os.Stat(abs)
