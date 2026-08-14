@@ -378,6 +378,7 @@ function rowEl(e) {
 
   const nameCell = document.createElement('div');
   nameCell.className = 'cell name';
+  nameCell.dataset.meta = (e.isDir ? '文件夹' : fmtSize(e.size)) + ' · ' + fmtTime(e.modTime);
   const icon = document.createElement('span');
   icon.className = 'icon';
   const rowKind = e.isDir ? '' : mediaKind(e.name);

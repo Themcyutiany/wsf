@@ -10,6 +10,7 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%}
+.row,.btn,.mini-btn,.crumb,.chip.clickable,.fab,input,label,input[type="checkbox"]{touch-action:manipulation}
 body{
   font-family:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
   color:var(--text);
@@ -134,12 +135,25 @@ main{max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 
 /* responsive */
 @media (max-width:760px){
-  .list-card .list-head,.row{grid-template-columns:32px minmax(0,1fr) 92px 118px}
+  body{padding:14px 10px 96px}
+  .topbar{padding:0 2px}
+  .brand .logo{width:38px;height:38px;border-radius:10px}
+  .brand h1{font-size:18px}
+  .brand p{display:none}
+  .topmeta{gap:6px}
+  .chip{max-width:180px;padding:5px 10px;font-size:11px}
+  .list-card .list-head,.row{grid-template-columns:32px minmax(0,1fr) 84px 96px}
   .col-time{display:none}
   .cell.time{display:none}
-  .search{width:150px}
-  .topbar{padding:0 2px}
-  .brand p{display:none}
+  /* 工具栏：搜索框独占一行 */
+  .toolbar{flex-wrap:wrap;gap:8px}
+  .spacer{display:none}
+  #btn-refresh{order:4;margin-left:auto}
+  .search{order:5;flex:1 1 100%;width:100%;min-width:0;font-size:16px}
+  /* 面包屑过长时横向滚动 */
+  .breadcrumb{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+  .breadcrumb::-webkit-scrollbar{display:none}
+  .crumb{white-space:nowrap}
 }
 
 
@@ -210,9 +224,9 @@ body.no-scroll{overflow:hidden}
 .pv-dl{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);margin-left:auto;padding:7px 12px;border:1px solid var(--border);border-radius:9px;transition:all .15s}
 .pv-dl:hover{background:var(--accent-soft);border-color:var(--accent)}
 .pv-img-wrap{position:relative;display:flex;align-items:center;justify-content:center;max-width:100%;max-height:100%}
-.pv-img-wrap img{max-width:100%;max-height:calc(92vh - 130px);border-radius:10px;box-shadow:0 10px 40px rgba(2,6,23,.55);object-fit:contain}
+.pv-img-wrap img{max-width:100%;max-height:calc(92dvh - 130px);border-radius:10px;box-shadow:0 10px 40px rgba(2,6,23,.55);object-fit:contain}
 .pv-video-wrap{width:100%;max-height:calc(92vh - 130px);display:flex;align-items:center;justify-content:center}
-.pv-video-wrap video{width:100%;max-height:calc(92vh - 130px);border-radius:10px;background:#000;box-shadow:0 10px 40px rgba(2,6,23,.55)}
+.pv-video-wrap video{width:100%;max-height:calc(92dvh - 130px);border-radius:10px;background:#000;box-shadow:0 10px 40px rgba(2,6,23,.55)}
 .pv-err{color:var(--faint);font-size:14px;padding:30px;text-align:center}
 .pv-audio{padding:34px 16px}
 .audio-card{
@@ -240,7 +254,38 @@ body.no-scroll{overflow:hidden}
 .audio-vol{grid-column:1/3;width:100%;accent-color:var(--accent);position:relative;z-index:1}
 .spinner{position:absolute;width:34px;height:34px;border:3px solid rgba(255,255,255,.14);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @media (max-width:520px){
-  .preview{padding:10px}
+  /* 列表：两行式（名称 + 大小·时间），只留勾选/名称/操作 */
+  .list-card .list-head,.row{grid-template-columns:30px minmax(0,1fr) auto;gap:6px}
+  .col-size,.col-time{display:none}
+  .cell.size,.cell.time{display:none}
+  .list-head{padding:8px 12px}
+  .row{padding:9px 12px}
+  .row .cell.name{flex-wrap:wrap;row-gap:2px}
+  .row .cell.name::after{
+    content:attr(data-meta);flex:1 1 100%;max-width:100%;
+    font-size:11.5px;color:var(--faint);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .checkall input{width:17px;height:17px;accent-color:var(--accent)}
+  .row-actions{gap:4px}
+  .mini-btn{padding:7px 9px;font-size:12px}
+  /* 输入框 ≥16px，防止 iOS 聚焦时自动放大页面 */
+  .field input,.login-field input{font-size:16px}
+  /* 悬浮按钮与提示适配 iPhone 安全区 */
+  .fab{right:16px;bottom:calc(16px + env(safe-area-inset-bottom));padding:13px 18px;font-size:13px}
+  #toasts{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom))}
+  .toast{max-width:none}
+  /* 弹窗改为底部抽屉式 */
+  .modal{padding:0;align-items:flex-end}
+  .modal-box{width:100%;max-width:none;max-height:88dvh;border-radius:20px 20px 0 0;border-bottom:none}
+  .modal-body{padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+  /* 预览：全屏沉浸式 */
+  .preview{padding:0}
+  .pv-box{width:100%;max-width:none;max-height:100dvh;height:100dvh;border-radius:0;border-left:none;border-right:none;border-top:none}
+  .pv-body{padding:10px}
+  .pv-img-wrap img{max-height:calc(100dvh - 150px)}
+  .pv-video-wrap video{max-height:calc(100dvh - 150px)}
+  /* 音频卡片 */
   .audio-card{grid-template-columns:1fr;justify-items:center;text-align:center;padding:20px 16px}
   .audio-play{grid-column:auto}
   .audio-progress,.audio-times,.audio-vol{grid-column:1/2;width:100%}
