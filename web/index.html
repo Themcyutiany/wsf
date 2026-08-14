@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wsf · 文件共享</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5"/><path d="m9.5 13.5 2.5 2.5 2.5-2.5"/></svg>
+    </span>
+    <div><h1>wsf</h1><p>Web Share Files · 局域网文件共享</p></div>
+  </div>
+  <div class="topmeta" id="topmeta"></div>
+</header>
+
+<main>
+  <section class="card nav-card">
+    <nav class="breadcrumb" id="breadcrumb"></nav>
+    <div class="toolbar">
+      <label class="checkall"><input type="checkbox" id="check-all"><span>全选</span></label>
+      <button class="btn" id="btn-zip" disabled>打包下载选中</button>
+      <div class="spacer"></div>
+      <input class="search" id="search" type="search" placeholder="搜索文件…" autocomplete="off">
+      <button class="btn icon-btn" id="btn-refresh" title="刷新">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <section class="card list-card">
+    <div class="list-head">
+      <div class="col-check"></div>
+      <div class="col-name col-sort" data-sort="name">名称<span class="arrow" id="arrow-name"></span></div>
+      <div class="col-size col-sort" data-sort="size">大小<span class="arrow" id="arrow-size"></span></div>
+      <div class="col-time col-sort" data-sort="modTime">修改时间<span class="arrow" id="arrow-time"></span></div>
+      <div class="col-actions"></div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="empty hidden" id="empty">
+      <div class="eicon"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+      <p id="empty-text">此文件夹为空</p>
+    </div>
+  </section>
+
+  <section class="card card-pad foot-card">
+    <span id="summary">加载中…</span>
+    <div class="spacer"></div>
+    <span id="uptime"></span>
+  </section>
+</main>
+
+<button class="fab" id="btn-url">
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>
+  远程下载
+</button>
+
+<div class="modal hidden" id="modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>远程下载（走本地代理）</h2>
+      <button class="modal-close" id="modal-close" title="关闭">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="url-form">
+        <div class="field">
+          <label for="url-input">文件链接（http/https）</label>
+          <input id="url-input" type="url" placeholder="https://example.com/file.zip" required>
+        </div>
+        <div class="field">
+          <label for="file-input">保存文件名（可选）</label>
+          <input id="file-input" type="text" placeholder="留空则自动识别">
+        </div>
+        <div class="proxy-hint" id="proxy-hint"></div>
+        <button class="btn primary" id="url-submit" style="width:100%;justify-content:center">开始下载</button>
+      </form>
+      <div class="task-list" id="task-list"></div>
+      <div class="task-empty" id="task-empty">暂无下载任务</div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
