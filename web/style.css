@@ -137,3 +137,45 @@ main{max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
   .topbar{padding:0 2px}
   .brand p{display:none}
 }
+
+
+/* login overlay */
+.login-overlay{
+  position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:
+    radial-gradient(640px 420px at 28% 18%, rgba(56,189,248,.18), transparent 60%),
+    radial-gradient(560px 380px at 76% 82%, rgba(129,140,248,.18), transparent 60%),
+    rgba(4,8,20,.78);
+  backdrop-filter:blur(10px);
+  opacity:0;pointer-events:none;transition:opacity .28s ease;
+}
+.login-overlay.show{opacity:1;pointer-events:auto}
+.login-card{
+  width:100%;max-width:380px;background:linear-gradient(180deg,#121c3c,#0e1530);
+  border:1px solid var(--border-strong);border-radius:22px;
+  box-shadow:var(--shadow),0 0 0 1px rgba(56,189,248,.06),0 24px 60px rgba(2,6,23,.55);
+  padding:36px 32px 30px;text-align:center;
+  transform:translateY(10px) scale(.98);transition:transform .28s ease;
+}
+.login-overlay.show .login-card{transform:none}
+.login-card.shake{animation:shake .45s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(3px)}}
+.login-lock{
+  width:60px;height:60px;margin:0 auto 16px;border-radius:18px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(135deg,#22d3ee,#6366f1);box-shadow:0 12px 30px rgba(99,102,241,.45);
+}
+.login-card h2{margin:0 0 8px;font-size:21px;letter-spacing:.4px}
+.login-sub{margin:0 0 24px;color:var(--muted);font-size:13px;line-height:1.6}
+.login-field input{
+  width:100%;background:rgba(2,6,23,.45);border:1px solid var(--border);color:var(--text);
+  border-radius:12px;padding:13px 14px;font-size:15px;text-align:center;outline:none;letter-spacing:2px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.login-field input::placeholder{letter-spacing:0;color:var(--faint)}
+.login-field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.login-error{display:none;color:var(--red);font-size:12.5px;margin:10px 0 0}
+.login-error.show{display:block}
+.login-btn{width:100%;margin-top:20px;justify-content:center;padding:13px;font-size:15px;border-radius:12px}
+@media (max-width:480px){
+  .login-card{padding:30px 22px 26px}
+}

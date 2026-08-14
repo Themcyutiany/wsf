@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-var version = "0.1.0"
+var version = "0.2.0"
 
 func main() {
 	var (
@@ -24,13 +24,14 @@ func main() {
 		addr    = flag.String("a", "0.0.0.0", "监听地址")
 		proxy   = flag.String("proxy", "http://127.0.0.1:7897", "远程下载使用的 HTTP 代理")
 		noProxy = flag.Bool("no-proxy", false, "禁用代理，远程下载直连")
+		pws     = flag.String("pws", "", "Web 访问密码（设置后浏览/下载需输入密码）")
 		showVer = flag.Bool("version", false, "显示版本号")
 	)
 	flag.Usage = func() {
 		out := flag.CommandLine.Output()
 		fmt.Fprintf(out, "wsf %s — 局域网网页文件共享\n\n用法: wsf [-f 文件夹] [-p 端口] [选项]\n\n选项:\n", version)
 		flag.PrintDefaults()
-		fmt.Fprintf(out, "\n示例:\n  wsf -f D:\\share -p 5665\n  wsf -f ./docs\n  wsf -f . -p 8080 --no-proxy\n")
+		fmt.Fprintf(out, "\n示例:\n  wsf -f D:\\share -p 5665\n  wsf -f D:\\share -p 5665 -pws 123456\n  wsf -f ./docs\n  wsf -f . -p 8080 --no-proxy\n")
 	}
 	flag.Parse()
 
@@ -56,7 +57,7 @@ func main() {
 		log.Fatalf("共享目录不是有效的文件夹: %s", absRoot)
 	}
 
-	app := NewApp(absRoot, *proxy, *noProxy, *port)
+	app := NewApp(absRoot, *proxy, *noProxy, *port, *pws)
 	server := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", *addr, *port),
 		Handler:           app.handler(),
@@ -96,6 +97,11 @@ func printBanner(app *App) {
 		fmt.Println("  代理      已禁用（远程下载直连）")
 	} else {
 		fmt.Printf("  代理      %s（用于网页“远程下载”）\n", app.proxy)
+	}
+	if app.authEnabled {
+		fmt.Println("  访问密码  已启用")
+	} else {
+		fmt.Println("  访问密码  未启用（任何人可访问）")
 	}
 	fmt.Println(sep)
 	fmt.Println("  按 Ctrl+C 退出")

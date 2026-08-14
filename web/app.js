@@ -17,10 +17,12 @@ const state = {
   sortKey: 'name',
   sortAsc: true,
   info: null,
+  auth: false,
   tasks: [],
   knownDone: new Set(),
   polling: null,
   refreshTimer: null,
+  tickTimer: null,
 };
 
 /* ---------- utils ---------- */
@@ -55,7 +57,10 @@ async function api(path, opts) {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { const j = await res.json(); if (j.error) msg = j.error; } catch (_) {}
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = res.status;
+    if (res.status === 401 && path !== '/api/login') showLogin();
+    throw err;
   }
   return res.json();
 }
@@ -71,14 +76,24 @@ function escapeAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '
 /* ---------- init ---------- */
 async function init() {
   bindEvents();
+  await bootstrap();
+}
+
+async function bootstrap() {
   try {
     state.info = await api('/api/info');
+    state.auth = !!state.info.auth;
+    hideLogin();
     renderTopmeta();
-  } catch (_) { toast('无法连接服务端', 'error'); }
-  const q = new URLSearchParams(location.search).get('path');
-  await loadPath(q && q.startsWith('/') ? q : '/');
-  setInterval(tick, 1000);
-  startPolling();
+    const q = new URLSearchParams(location.search).get('path');
+    await loadPath(q && q.startsWith('/') ? q : '/');
+    if (!state.tickTimer) state.tickTimer = setInterval(tick, 1000);
+    startPolling();
+  } catch (err) {
+    if (err && err.status === 401) { showLogin(); return; }
+    hideLogin();
+    toast('无法连接服务端', 'error');
+  }
 }
 
 function bindEvents() {
@@ -105,10 +120,58 @@ function bindEvents() {
     });
   });
   $('url-form').addEventListener('submit', submitUrlDownload);
+  $('login-form').addEventListener('submit', submitLogin);
   window.addEventListener('popstate', () => {
     const q = new URLSearchParams(location.search).get('path');
     loadPath(q && q.startsWith('/') ? q : '/', true);
   });
+}
+
+/* ---------- 登录 ---------- */
+function showLogin() {
+  const ov = $('login-overlay');
+  ov.classList.remove('hidden');
+  setTimeout(() => ov.classList.add('show'), 10);
+  setTimeout(() => $('login-pass').focus(), 90);
+}
+function hideLogin() {
+  const ov = $('login-overlay');
+  ov.classList.remove('show');
+  setTimeout(() => ov.classList.add('hidden'), 260);
+  $('login-error').classList.remove('show');
+  $('login-pass').value = '';
+}
+async function submitLogin(e) {
+  e.preventDefault();
+  const pass = $('login-pass').value;
+  if (!pass) return;
+  const btn = $('login-submit');
+  btn.disabled = true;
+  try {
+    await api('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pass }),
+    });
+    await bootstrap();
+  } catch (err) {
+    const errEl = $('login-error');
+    errEl.textContent = err.status === 401 ? '密码错误，请重试' : '登录失败：' + err.message;
+    errEl.classList.add('show');
+    const card = document.querySelector('.login-card');
+    card.classList.remove('shake');
+    void card.offsetWidth;
+    card.classList.add('shake');
+    $('login-pass').value = '';
+    $('login-pass').focus();
+  } finally {
+    btn.disabled = false;
+  }
+}
+async function logout() {
+  try { await api('/api/logout', { method: 'POST' }); } catch (_) {}
+  state.auth = false;
+  showLogin();
 }
 
 /* ---------- info ---------- */
@@ -120,6 +183,16 @@ function renderTopmeta() {
   root.title = '共享目录';
   root.innerHTML = '共享目录 <b>' + escapeAttr(state.info.root) + '</b>';
   meta.appendChild(root);
+
+  if (state.auth) {
+    const out = document.createElement('span');
+    out.className = 'chip clickable';
+    out.id = 'btn-logout';
+    out.title = '退出登录';
+    out.textContent = '退出登录';
+    out.addEventListener('click', logout);
+    meta.appendChild(out);
+  }
 
   if (state.info.addrs && state.info.addrs.length) {
     const addr = document.createElement('span');

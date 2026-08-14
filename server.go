@@ -11,24 +11,30 @@ import (
 )
 
 type App struct {
-	root      string
-	port      int
-	proxy     string
-	noProxy   bool
-	addrs     []string
-	startTime time.Time
-	tasks     *TaskManager
+	root        string
+	port        int
+	proxy       string
+	noProxy     bool
+	addrs       []string
+	startTime   time.Time
+	tasks       *TaskManager
+	password    string
+	authEnabled bool
+	authSecret  []byte
 }
 
-func NewApp(root, proxy string, noProxy bool, port int) *App {
+func NewApp(root, proxy string, noProxy bool, port int, password string) *App {
 	return &App{
 		root:      root,
 		port:      port,
 		proxy:     proxy,
 		noProxy:   noProxy,
-		addrs:     lanIPs(),
-		startTime: time.Now(),
-		tasks:     NewTaskManager(),
+		addrs:       lanIPs(),
+		startTime:   time.Now(),
+		tasks:       NewTaskManager(),
+		password:    password,
+		authEnabled: password != "",
+		authSecret:  newAuthSecret(),
 	}
 }
 
@@ -42,13 +48,15 @@ func (a *App) handler() http.Handler {
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(sub))))
 
 	mux.HandleFunc("/", a.handleIndex)
-	mux.HandleFunc("/api/info", a.handleInfo)
-	mux.HandleFunc("/api/list", a.handleList)
-	mux.HandleFunc("/api/download", a.handleDownload)
-	mux.HandleFunc("/api/zip", a.handleZip)
-	mux.HandleFunc("/api/url-download", a.handleURLDownload)
-	mux.HandleFunc("/api/tasks", a.handleTasks)
-	mux.HandleFunc("/api/tasks/", a.handleTaskAction)
+	mux.HandleFunc("/api/login", a.handleLogin)
+	mux.HandleFunc("/api/logout", a.handleLogout)
+	mux.HandleFunc("/api/info", a.requireAuthFunc(a.handleInfo))
+	mux.HandleFunc("/api/list", a.requireAuthFunc(a.handleList))
+	mux.HandleFunc("/api/download", a.requireAuthFunc(a.handleDownload))
+	mux.HandleFunc("/api/zip", a.requireAuthFunc(a.handleZip))
+	mux.HandleFunc("/api/url-download", a.requireAuthFunc(a.handleURLDownload))
+	mux.HandleFunc("/api/tasks", a.requireAuthFunc(a.handleTasks))
+	mux.HandleFunc("/api/tasks/", a.requireAuthFunc(a.handleTaskAction))
 
 	return logRequests(mux)
 }
@@ -78,10 +86,22 @@ func (a *App) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"port":      a.port,
 		"proxy":     a.proxy,
 		"noProxy":   a.noProxy,
+		"auth":      a.authEnabled,
 		"addrs":     a.addrs,
 		"uptime":    int64(time.Since(a.startTime).Seconds()),
 		"startedAt": a.startTime.Format(time.RFC3339),
 	})
+}
+
+// requireAuthFunc 启用访问密码后，未通过会话校验的请求一律返回 401。
+func (a *App) requireAuthFunc(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if a.authEnabled && !a.validSession(r) {
+			httpError(w, http.StatusUnauthorized, "需要访问密码")
+			return
+		}
+		h(w, r)
+	}
 }
 
 func logRequests(next http.Handler) http.Handler {
