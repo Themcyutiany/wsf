@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-var version = "0.2.0"
+var version = "0.3.0"
 
 func main() {
 	var (
@@ -102,6 +102,11 @@ func printBanner(app *App) {
 		fmt.Println("  访问密码  已启用")
 	} else {
 		fmt.Println("  访问密码  未启用（任何人可访问）")
+	}
+	if app.ffmpeg == nil {
+		fmt.Println("  媒体预览  原生格式（未检测到 ffmpeg，其他格式需安装 ffmpeg）")
+	} else {
+		fmt.Printf("  媒体预览  原生格式 + ffmpeg 转码（%s）\n", app.videoCodecName())
 	}
 	fmt.Println(sep)
 	fmt.Println("  按 Ctrl+C 退出")

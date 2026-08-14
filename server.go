@@ -21,6 +21,7 @@ type App struct {
 	password    string
 	authEnabled bool
 	authSecret  []byte
+	ffmpeg      *ffmpegInfo
 }
 
 func NewApp(root, proxy string, noProxy bool, port int, password string) *App {
@@ -35,6 +36,7 @@ func NewApp(root, proxy string, noProxy bool, port int, password string) *App {
 		password:    password,
 		authEnabled: password != "",
 		authSecret:  newAuthSecret(),
+		ffmpeg:      detectFFmpeg(),
 	}
 }
 
@@ -53,6 +55,7 @@ func (a *App) handler() http.Handler {
 	mux.HandleFunc("/api/info", a.requireAuthFunc(a.handleInfo))
 	mux.HandleFunc("/api/list", a.requireAuthFunc(a.handleList))
 	mux.HandleFunc("/api/download", a.requireAuthFunc(a.handleDownload))
+	mux.HandleFunc("/api/preview", a.requireAuthFunc(a.handlePreview))
 	mux.HandleFunc("/api/zip", a.requireAuthFunc(a.handleZip))
 	mux.HandleFunc("/api/url-download", a.requireAuthFunc(a.handleURLDownload))
 	mux.HandleFunc("/api/tasks", a.requireAuthFunc(a.handleTasks))
@@ -87,6 +90,10 @@ func (a *App) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"proxy":     a.proxy,
 		"noProxy":   a.noProxy,
 		"auth":      a.authEnabled,
+		"preview": map[string]any{
+			"ffmpeg": a.transcodeOK(),
+			"codec":  a.videoCodecName(),
+		},
 		"addrs":     a.addrs,
 		"uptime":    int64(time.Since(a.startTime).Seconds()),
 		"startedAt": a.startTime.Format(time.RFC3339),

@@ -1,5 +1,5 @@
 APP    := wsf
-VERSION := 0.2.0
+VERSION := 0.3.0
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 .PHONY: build vet test release clean

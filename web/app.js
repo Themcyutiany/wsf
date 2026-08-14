@@ -7,6 +7,10 @@ const ICONS = {
   file: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#93a6c9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
   dl: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>',
   zip: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6l3 3h7a2 2 0 0 1 2 2z"/><path d="M12 11v5"/><path d="m9.5 13.5 2.5 2.5 2.5-2.5"/></svg>',
+  eye: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  play: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+  pause: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
+  note: '<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
 };
 
 const state = {
@@ -73,6 +77,33 @@ function toast(msg, type = 'info') {
 }
 function escapeAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
+/* ---------- 媒体类型 ---------- */
+function extOf(name) {
+  const i = name.lastIndexOf('.');
+  return i < 0 ? '' : name.slice(i).toLowerCase();
+}
+const NATIVE_IMAGE = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.avif', '.ico', '.jfif']);
+const NATIVE_VIDEO = new Set(['.mp4', '.m4v', '.webm', '.ogv', '.mov']);
+const NATIVE_AUDIO = new Set(['.mp3', '.wav', '.ogg', '.oga', '.opus', '.flac', '.m4a', '.weba']);
+const X_IMAGE = new Set(['.tif', '.tiff', '.heic', '.heif', '.jp2', '.ppm', '.pgm', '.pbm', '.pnm']);
+const X_VIDEO = new Set(['.avi', '.mkv', '.flv', '.wmv', '.ts', '.m2ts', '.mts', '.mpg', '.mpeg', '.vob', '.3gp', '.asf', '.rm', '.rmvb', '.divx', '.mxf']);
+const X_AUDIO = new Set(['.aac', '.ape', '.wma', '.mka', '.mid', '.midi', '.amr', '.caf', '.aiff', '.aif', '.ac3', '.ra', '.au', '.dts']);
+function mediaKind(name) {
+  const e = extOf(name);
+  if (NATIVE_IMAGE.has(e) || X_IMAGE.has(e)) return 'image';
+  if (NATIVE_VIDEO.has(e) || X_VIDEO.has(e)) return 'video';
+  if (NATIVE_AUDIO.has(e) || X_AUDIO.has(e)) return 'audio';
+  return '';
+}
+function isNativeMedia(name) {
+  const e = extOf(name);
+  return NATIVE_IMAGE.has(e) || NATIVE_VIDEO.has(e) || NATIVE_AUDIO.has(e);
+}
+function kindLabel(kind) { return { image: '图片预览', video: '视频播放', audio: '音频播放' }[kind] || ''; }
+function transcodeAvailable() {
+  return state.info && state.info.preview && state.info.preview.ffmpeg;
+}
+
 /* ---------- init ---------- */
 async function init() {
   bindEvents();
@@ -121,6 +152,11 @@ function bindEvents() {
   });
   $('url-form').addEventListener('submit', submitUrlDownload);
   $('login-form').addEventListener('submit', submitLogin);
+  $('pv-close').addEventListener('click', closePreview);
+  $('pv-backdrop').addEventListener('click', closePreview);
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && !$('preview').classList.contains('hidden')) closePreview();
+  });
   window.addEventListener('popstate', () => {
     const q = new URLSearchParams(location.search).get('path');
     loadPath(q && q.startsWith('/') ? q : '/', true);
@@ -371,6 +407,16 @@ function rowEl(e) {
     zip.innerHTML = ICONS.zip + 'ZIP';
     acts.appendChild(zip);
   } else {
+    const kind = mediaKind(e.name);
+    if (kind) {
+      const pv = document.createElement('a');
+      pv.className = 'mini-btn pv';
+      pv.href = 'javascript:void(0)';
+      pv.title = '预览' + (isNativeMedia(e.name) ? '' : '（服务端转码）');
+      pv.innerHTML = ICONS.eye;
+      pv.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); openPreview(e); });
+      acts.appendChild(pv);
+    }
     const dl = document.createElement('a');
     dl.className = 'mini-btn dl';
     dl.href = '/api/download?path=' + encodeURIComponent(e.path);
@@ -424,6 +470,189 @@ async function downloadSelected() {
     btn.disabled = false;
     btn.textContent = old;
   }
+}
+
+/* ---------- 媒体预览 ---------- */
+function openPreview(e) {
+  const kind = mediaKind(e.name);
+  if (!kind) return;
+  const url = '/api/preview?path=' + encodeURIComponent(e.path);
+  const body = $('pv-body');
+  body.innerHTML = '';
+  body.className = 'pv-body pv-' + kind;
+  $('pv-title').textContent = e.name;
+  $('pv-title').title = e.name;
+  const kindEl = $('pv-kind');
+  kindEl.textContent = kindLabel(kind);
+  kindEl.className = 'pv-kind ' + kind;
+  const foot = $('pv-foot');
+  foot.innerHTML = '';
+  const transcoded = !isNativeMedia(e.name) && transcodeAvailable();
+  if (transcoded) {
+    const hint = document.createElement('span');
+    hint.className = 'pv-hint';
+    hint.textContent = kind === 'video'
+      ? '服务端正在转码播放，首次打开需等待片刻，且不支持拖动进度条'
+      : '服务端正在转码播放，首次打开需等待片刻';
+    foot.appendChild(hint);
+  }
+  const dl = document.createElement('a');
+  dl.className = 'pv-dl';
+  dl.href = '/api/download?path=' + encodeURIComponent(e.path);
+  dl.download = e.name;
+  dl.innerHTML = ICONS.dl + '下载原文件';
+  foot.appendChild(dl);
+
+  $('preview').classList.remove('hidden');
+  document.body.classList.add('no-scroll');
+
+  if (kind === 'image') renderImagePreview(url);
+  else if (kind === 'video') renderVideoPreview(url);
+  else renderAudioPreview(url, e);
+}
+
+function renderImagePreview(url) {
+  const body = $('pv-body');
+  const wrap = document.createElement('div');
+  wrap.className = 'pv-img-wrap';
+  const spinner = document.createElement('div');
+  spinner.className = 'spinner';
+  wrap.appendChild(spinner);
+  const img = document.createElement('img');
+  img.alt = '';
+  img.addEventListener('load', () => spinner.remove());
+  img.addEventListener('error', () => {
+    spinner.remove();
+    wrap.classList.add('pv-err');
+    wrap.textContent = '图片加载失败，可点击下方“下载原文件”查看';
+  });
+  img.src = url;
+  wrap.appendChild(img);
+  body.appendChild(wrap);
+}
+
+function renderVideoPreview(url) {
+  const body = $('pv-body');
+  const wrap = document.createElement('div');
+  wrap.className = 'pv-video-wrap';
+  const v = document.createElement('video');
+  v.controls = true;
+  v.autoplay = true;
+  v.playsInline = true;
+  v.src = url;
+  v.addEventListener('error', () => {
+    wrap.classList.add('pv-err');
+    wrap.textContent = '视频播放失败，可点击下方“下载原文件”后用本地播放器打开';
+  });
+  wrap.appendChild(v);
+  body.appendChild(wrap);
+}
+
+function renderAudioPreview(url, e) {
+  const body = $('pv-body');
+  const card = document.createElement('div');
+  card.className = 'audio-card';
+
+  const art = document.createElement('div');
+  art.className = 'audio-art';
+  art.innerHTML = ICONS.note;
+
+  const meta = document.createElement('div');
+  meta.className = 'audio-meta';
+  const name = document.createElement('div');
+  name.className = 'audio-name';
+  name.textContent = e.name;
+  name.title = e.name;
+  const size = document.createElement('div');
+  size.className = 'audio-size';
+  size.textContent = fmtSize(e.size) + ' · ' + (isNativeMedia(e.name) ? '浏览器原生格式' : '服务端转码格式');
+  meta.append(name, size);
+
+  const btn = document.createElement('button');
+  btn.className = 'audio-play';
+  btn.type = 'button';
+  btn.title = '播放 / 暂停';
+  btn.innerHTML = ICONS.play;
+
+  const prog = document.createElement('div');
+  prog.className = 'audio-progress';
+  const pbar = document.createElement('div');
+  pbar.className = 'audio-pbar';
+  prog.appendChild(pbar);
+
+  const times = document.createElement('div');
+  times.className = 'audio-times';
+  const cur = document.createElement('span');
+  cur.textContent = '00:00';
+  const dur = document.createElement('span');
+  dur.textContent = '--:--';
+  times.append(cur, dur);
+
+  const vol = document.createElement('input');
+  vol.className = 'audio-vol';
+  vol.type = 'range';
+  vol.min = 0;
+  vol.max = 100;
+  vol.value = 80;
+  vol.title = '音量';
+
+  const audio = document.createElement('audio');
+  audio.preload = 'metadata';
+  audio.src = url;
+
+  let playing = false;
+  const fmtT = (t) => {
+    if (!isFinite(t) || t < 0) return '--:--';
+    const m = Math.floor(t / 60), sec = Math.floor(t % 60);
+    return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  };
+  const syncBtn = () => { btn.innerHTML = playing ? ICONS.pause : ICONS.play; };
+  btn.addEventListener('click', () => {
+    if (playing) audio.pause();
+    else audio.play().catch(() => toast('播放失败，可点击“下载原文件”查看', 'error'));
+  });
+  audio.addEventListener('play', () => { playing = true; syncBtn(); card.classList.add('playing'); });
+  audio.addEventListener('pause', () => { playing = false; syncBtn(); card.classList.remove('playing'); });
+  audio.addEventListener('ended', () => {
+    playing = false; syncBtn(); card.classList.remove('playing');
+    pbar.style.width = '0%'; cur.textContent = '00:00';
+  });
+  audio.addEventListener('loadedmetadata', () => { dur.textContent = fmtT(audio.duration); });
+  audio.addEventListener('timeupdate', () => {
+    cur.textContent = fmtT(audio.currentTime);
+    if (isFinite(audio.duration) && audio.duration > 0) {
+      pbar.style.width = (audio.currentTime / audio.duration * 100) + '%';
+    }
+  });
+  prog.addEventListener('click', (ev) => {
+    const r = prog.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+    if (isFinite(audio.duration) && audio.duration > 0) {
+      audio.currentTime = ratio * audio.duration;
+    } else {
+      toast('转码播放中，暂不支持拖动进度', 'info');
+    }
+  });
+  vol.addEventListener('input', () => { audio.volume = vol.value / 100; });
+
+  card.append(art, meta, btn, prog, times, vol);
+  body.appendChild(card);
+  body.appendChild(audio);
+  audio.play().catch(() => {});
+}
+
+function closePreview() {
+  const body = $('pv-body');
+  body.querySelectorAll('video, audio').forEach((m) => {
+    m.pause();
+    m.removeAttribute('src');
+    m.load();
+  });
+  body.innerHTML = '';
+  body.className = 'pv-body';
+  $('pv-foot').innerHTML = '';
+  $('preview').classList.add('hidden');
+  document.body.classList.remove('no-scroll');
 }
 
 /* ---------- 远程下载 ---------- */
