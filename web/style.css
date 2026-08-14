@@ -69,7 +69,11 @@ main{max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 .row.selected{background:var(--accent-soft)}
 .row .cell{min-width:0}
 .row .cell.name{display:flex;align-items:center;gap:10px}
-.row .icon{flex:none;width:22px;height:22px;display:grid;place-items:center;opacity:.9}
+.row .icon{flex:none;width:44px;height:44px;display:grid;place-items:center;opacity:.9}
+.row .icon .thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--card-hover);border:1px solid var(--border);cursor:pointer;display:block;transition:transform .15s,box-shadow .15s}
+.row .icon .thumb:hover{transform:scale(1.07);box-shadow:0 6px 18px rgba(2,6,23,.5);border-color:var(--accent)}
+.row .icon .thumb-fallback{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(56,189,248,.12),rgba(129,140,248,.12));border:1px solid var(--border);color:var(--accent);cursor:pointer;transition:border-color .15s}
+.row .icon .thumb-fallback:hover{border-color:var(--accent)}
 .row .name-link{color:var(--text);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .name-link:hover{color:var(--accent)}
 .row .name-link.hidden-name{color:var(--faint)}

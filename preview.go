@@ -39,16 +39,38 @@ type ffmpegInfo struct {
 	hasOpus bool
 }
 
-// detectFFmpeg 探测系统 ffmpeg 及关键编码器，找不到返回 nil。
+// detectFFmpeg 按优先级探测 ffmpeg：内置 → 系统 PATH → 程序同目录，找不到返回 nil。
 func detectFFmpeg() *ffmpegInfo {
-	p, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		return nil
+	var candidates []string
+	if p := extractBuiltinFFmpeg(); p != "" {
+		candidates = append(candidates, p)
 	}
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		candidates = append(candidates, p)
+	}
+	if self, err := os.Executable(); err == nil {
+		dir := filepath.Dir(self)
+		for _, name := range []string{"ffmpeg.exe", "ffmpeg"} {
+			p := filepath.Join(dir, name)
+			if _, err := os.Stat(p); err == nil {
+				candidates = append(candidates, p)
+			}
+		}
+	}
+	for _, p := range candidates {
+		if info := probeFFmpeg(p); info != nil {
+			return info
+		}
+	}
+	return nil
+}
+
+// probeFFmpeg 探测指定 ffmpeg 路径及关键编码器。
+func probeFFmpeg(p string) *ffmpegInfo {
 	info := &ffmpegInfo{path: p}
 	out, err := exec.Command(p, "-hide_banner", "-encoders").Output()
 	if err != nil {
-		return info
+		return nil
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		f := strings.Fields(line)

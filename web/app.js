@@ -7,7 +7,9 @@ const ICONS = {
   file: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#93a6c9" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
   dl: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>',
   zip: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6l3 3h7a2 2 0 0 1 2 2z"/><path d="M12 11v5"/><path d="m9.5 13.5 2.5 2.5 2.5-2.5"/></svg>',
-  eye: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  image: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>',
+  video: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="m16 10 6-3v10l-6-3z"/></svg>',
+  audio: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
   play: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
   pause: '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
   note: '<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
@@ -94,6 +96,12 @@ function mediaKind(name) {
   if (NATIVE_VIDEO.has(e) || X_VIDEO.has(e)) return 'video';
   if (NATIVE_AUDIO.has(e) || X_AUDIO.has(e)) return 'audio';
   return '';
+}
+function mediaIcon(kind) {
+  const el = document.createElement('span');
+  el.className = 'thumb-fallback';
+  el.innerHTML = kind === 'image' ? ICONS.image : kind === 'video' ? ICONS.video : ICONS.audio;
+  return el;
 }
 function isNativeMedia(name) {
   const e = extOf(name);
@@ -234,7 +242,8 @@ function renderTopmeta() {
     const addr = document.createElement('span');
     addr.className = 'chip clickable';
     addr.title = '点击复制局域网访问地址';
-    const url = `http://${state.info.addrs[0]}:${state.info.port}`;
+    const host = state.info.addrs[0].includes(':') ? '[' + state.info.addrs[0] + ']' : state.info.addrs[0];
+    const url = `http://${host}:${state.info.port}`;
     addr.innerHTML = '访问地址 <b>' + escapeAttr(url) + '</b>';
     addr.addEventListener('click', () => {
       navigator.clipboard?.writeText(url).then(
@@ -371,7 +380,27 @@ function rowEl(e) {
   nameCell.className = 'cell name';
   const icon = document.createElement('span');
   icon.className = 'icon';
-  icon.innerHTML = e.isDir ? ICONS.dir : ICONS.file;
+  const rowKind = e.isDir ? '' : mediaKind(e.name);
+  if (rowKind) {
+    const img = document.createElement('img');
+    img.className = 'thumb';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.alt = '';
+    img.title = '点击预览';
+    img.src = '/api/thumb?path=' + encodeURIComponent(e.path) + '&w=96';
+    img.addEventListener('error', () => {
+      if (img.dataset.fallback) return;
+      img.dataset.fallback = '1';
+      const span = mediaIcon(rowKind);
+      img.replaceWith(span);
+      span.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); openPreview(e); });
+    });
+    img.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); openPreview(e); });
+    icon.appendChild(img);
+  } else {
+    icon.innerHTML = e.isDir ? ICONS.dir : ICONS.file;
+  }
   const a = document.createElement('a');
   a.className = 'name-link' + (e.hidden ? ' hidden-name' : '');
   a.textContent = e.name;
@@ -407,16 +436,6 @@ function rowEl(e) {
     zip.innerHTML = ICONS.zip + 'ZIP';
     acts.appendChild(zip);
   } else {
-    const kind = mediaKind(e.name);
-    if (kind) {
-      const pv = document.createElement('a');
-      pv.className = 'mini-btn pv';
-      pv.href = 'javascript:void(0)';
-      pv.title = '预览' + (isNativeMedia(e.name) ? '' : '（服务端转码）');
-      pv.innerHTML = ICONS.eye;
-      pv.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); openPreview(e); });
-      acts.appendChild(pv);
-    }
     const dl = document.createElement('a');
     dl.className = 'mini-btn dl';
     dl.href = '/api/download?path=' + encodeURIComponent(e.path);

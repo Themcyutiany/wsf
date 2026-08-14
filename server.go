@@ -56,6 +56,7 @@ func (a *App) handler() http.Handler {
 	mux.HandleFunc("/api/list", a.requireAuthFunc(a.handleList))
 	mux.HandleFunc("/api/download", a.requireAuthFunc(a.handleDownload))
 	mux.HandleFunc("/api/preview", a.requireAuthFunc(a.handlePreview))
+	mux.HandleFunc("/api/thumb", a.requireAuthFunc(a.handleThumb))
 	mux.HandleFunc("/api/zip", a.requireAuthFunc(a.handleZip))
 	mux.HandleFunc("/api/url-download", a.requireAuthFunc(a.handleURLDownload))
 	mux.HandleFunc("/api/tasks", a.requireAuthFunc(a.handleTasks))

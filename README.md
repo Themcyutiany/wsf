@@ -11,8 +11,7 @@
 # 共享当前目录，默认端口 5665
 wsf -f .
 
-# 媒体预览：本机安装 ffmpeg 后，MKV/AVI 等格式也会自动转码播放
-# Windows: winget install Gyan.FFmpeg    Linux: sudo apt install ffmpeg
+# 媒体预览：程序已内置 ffmpeg，MKV/AVI 等格式开箱即可转码播放，无需额外安装
 
 # 共享指定文件夹，自定义端口
 wsf -f D:\share -p 8080
@@ -42,7 +41,7 @@ wsf -f . --no-proxy
 ## 功能
 
 - 媒体在线预览：图片、视频、音频在网页里直接预览/播放（原生格式直接播放；其他格式如
-  MKV / AVI / FLV / WMV / HEIC / APE 等会自动调用 ffmpeg 实时转码播放）
+  MKV / AVI / FLV / WMV / HEIC / APE 等会自动调用内置 ffmpeg 实时转码播放）
 - 访问密码保护：`-pws` 设置密码后，打开网页需先输入密码才能浏览和下载
 - 网页浏览共享目录：面包屑导航、搜索、按名称 / 大小 / 时间排序
 - 单个文件下载（支持断点续传 Range）；文件夹一键打包 ZIP；多选打包 ZIP
@@ -51,16 +50,18 @@ wsf -f . --no-proxy
 - 路径穿越防护：任何请求都无法访问共享目录之外的内容
 - 纯 Go 标准库实现，零第三方依赖，单文件二进制，Windows / Linux 通用
 - 媒体预览说明：jpg/png/gif/webp/svg、mp4/webm/ogv/mov、mp3/wav/flac/m4a/ogg 等常用格式
-  由浏览器原生播放；mkv/avi/flv/wmv/heic/ape 等其余格式需要本机安装 `ffmpeg` 才会自动
-  转码播放（启动横幅会提示是否检测到 ffmpeg）
+  由浏览器原生播放；mkv/avi/flv/wmv/heic/ape 等其余格式由程序内置的 `ffmpeg` 自动
+  转码播放（正式版二进制已内置 ffmpeg，无需安装；启动横幅会显示检测状态）
 
 ## 构建
 
 需要 Go 1.24+：
 
 ```bash
-go build .                  # 构建当前平台
-make release                # 交叉编译 Windows/Linux amd64+arm64 到 dist/
+go build .                  # 构建当前平台（不带内置 ffmpeg）
+go build -tags embedded_ffmpeg .   # 构建并内置 ffmpeg（正式版方式）
+make build                  # 构建当前平台（make 构建默认内置 ffmpeg）
+make release                # 交叉编译 Windows/Linux amd64+arm64 到 dist/（内置 ffmpeg）
 make test                   # go vet + go test
 ```
 
